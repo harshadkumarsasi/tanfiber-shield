@@ -19,18 +19,23 @@ export default function Home() {
   useEffect(() => {
     if (!riskData) return;
 
-    const segments = riskData.segment_risks || [];
-    const highest = segments.length
-      ? Math.max(...segments.map((s: any) => s.risk))
-      : riskData.ivi_score;
+    const segmentsDetailed = riskData.segments_detailed || [];
 
-    const highSegmentIndex = segments.findIndex((s: any) => s.risk === highest);
+    if (!segmentsDetailed.length) return;
 
-    let tone = "stable";
-    if (riskData.ivi_score > 70) tone = "critical";
-    else if (riskData.ivi_score > 40) tone = "elevated";
+    let maxIFI = 0;
+    let worstSegment = "";
 
-    const insight = `AI Analysis: Segment ${highSegmentIndex + 1} is currently the most vulnerable with a risk score of ${highest.toFixed(1)}. Overall infrastructure exposure is ${tone}. Recommend preventive inspection and dispatch prioritization within high-risk zones.`;
+    segmentsDetailed.forEach((segment: any) => {
+      if (segment.ifi > maxIFI) {
+        maxIFI = segment.ifi;
+        worstSegment = segment.id;
+      }
+    });
+
+    const tone = maxIFI > 0.6 ? "critical" : maxIFI > 0.3 ? "elevated" : "stable";
+
+    const insight = `AI Analysis: Segment ${worstSegment} exhibits the highest Infrastructure Fragility Index (IFI=${maxIFI.toFixed(2)}). System condition is ${tone}. Recommend preventive inspection before redundancy degradation.`;
 
     setExecutiveInsight(insight);
   }, [riskData]);
@@ -38,7 +43,10 @@ export default function Home() {
   useEffect(() => {
     if (!riskData) return;
 
-    const target = riskData.ivi_score;
+    const segmentMeans = (riskData.segments_detailed || []).map((s: any) => s.probability);
+    const target = segmentMeans.length
+      ? segmentMeans.reduce((a: number, b: number) => a + b, 0) / segmentMeans.length
+      : 0;
     let current = displayIvi;
 
     const step = (target - current) / 20;
@@ -97,11 +105,14 @@ export default function Home() {
           <p className="text-xs text-gray-400">
             Infrastructure Intelligence Platform
           </p>
+          <p className="text-xs text-blue-400 mt-1">
+            Active District: {riskData?.district || "Loading..."}
+          </p>
         </div>
 
         <div className="flex gap-6 text-sm text-gray-300">
-          <span className={riskData?.ivi_score > 70 ? "text-red-400" : "text-green-400"}>
-            {riskData?.ivi_score > 70 ? "⚠ Threat Escalated" : "● System Online"}
+          <span className={displayIvi > 0.7 ? "text-red-400" : "text-green-400"}>
+            {displayIvi > 0.7 ? "⚠ Threat Escalated" : "● System Online"}
           </span>
           <span>AI Agents: 5/5 Operational</span>
           <span>{currentTime}</span>
@@ -132,7 +143,11 @@ export default function Home() {
 
         {/* Map */}
         <div className="flex-1">
-          <MapComponent riskScore={riskData?.ivi_score} segmentRisks={riskData?.segment_risks} />
+          <MapComponent
+            riskScore={displayIvi}
+            segmentRisks={(riskData?.segments_detailed || []).map((s: any) => s.probability)}
+            segmentDetails={riskData?.segments_detailed || []}
+          />
         </div>
 
         {/* Right Panel */}
@@ -142,9 +157,9 @@ export default function Home() {
           </h2>
 
           <div className={`p-4 rounded-md transition-all duration-300 ${
-            riskData?.ivi_score > 70
+            displayIvi > 0.7
               ? "bg-red-900/40 border border-red-500"
-              : riskData?.ivi_score > 40
+              : displayIvi > 0.4
               ? "bg-yellow-900/40 border border-yellow-500"
               : "bg-[#1f2937]"
           }`}>
@@ -152,7 +167,7 @@ export default function Home() {
               {riskData ? displayIvi.toFixed(1) : "..."}
             </p>
             <p className="text-sm text-gray-400">
-              {riskData ? riskData.risk_level : "Loading..."}
+              {riskData ? `District: ${riskData.district}` : "Loading..."}
             </p>
           </div>
 
@@ -161,10 +176,7 @@ export default function Home() {
               Risk Prediction
             </h3>
             <p className="text-sm">
-              Max Risk: {riskData ? riskData.max_risk : "..."}
-            </p>
-            <p className="text-sm">
-              Threat Count: {riskData ? riskData.threat_count : "..."}
+              Highest Segment Risk: {riskData ? riskData.highest_risk_value?.toFixed(2) : "..."}
             </p>
             <div className="mt-6">
               <button
@@ -207,7 +219,7 @@ export default function Home() {
             <h3 className="text-sm text-gray-400 mb-2">
               Digital Twin (Network Graph)
             </h3>
-            <DigitalTwin segmentRisks={riskData?.segment_risks} />
+            <DigitalTwin segmentRisks={(riskData?.segments_detailed || []).map((s: any) => s.probability)} />
           </div>
         </div>
 

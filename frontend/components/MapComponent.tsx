@@ -7,63 +7,34 @@ import { LatLngExpression } from "leaflet";
 import L from "leaflet";
 import "leaflet.heat";
 
-// Primary backbone route
-const fiberRouteA: LatLngExpression[] = [
-  [13.0827, 80.2707],
-  [13.0674, 80.2376],
-  [13.0475, 80.2121],
-  [13.0358, 80.1982],
+// Real Kanchipuram GP Coordinates
+const gpNodes: LatLngExpression[] = [
+  [12.7641, 79.8353], // Angambakkam
+  [12.8862, 79.6544], // Ariyaperumbakkam
+  [12.8151, 79.7479], // Asoor
+  [12.7834, 79.8001], // Avalur
+  [12.7843, 79.6628], // Ayyangarkulam
+  [12.8866, 79.5927], // Damal
+  [12.7201, 79.7989], // Elayanarvelur
+  [12.7677, 79.7335], // Kalakattur
+  [12.7579, 79.7484], // Kalur
 ];
 
-// Secondary distribution route
-const fiberRouteB: LatLngExpression[] = [
-  [13.0827, 80.2707],
-  [13.095, 80.255],
-  [13.11, 80.24],
-];
-
-// Operational zones
-const zones = [
-  { name: "Zone Alpha", coords: [13.0827, 80.2707] },
-  { name: "Zone Beta", coords: [13.0475, 80.2121] },
-  { name: "Zone Gamma", coords: [13.11, 80.24] },
-];
-
-// Simulated dense anomaly incidents
-const incidentPoints: LatLngExpression[] = Array.from({ length: 60 }).map(() => [
-  13.03 + Math.random() * 0.12,
-  80.18 + Math.random() * 0.12,
-]);
+interface SegmentDetail {
+  id: string;
+  probability: number;
+  std: number;
+  impact: number;
+  ifi: number;
+  rainfall_normalized?: number;
+  construction_score?: number;
+  centrality?: number;
+}
 
 interface MapProps {
   riskScore?: number;
   segmentRisks?: number[];
-}
-
-function HeatLayer({ segmentRisks }: { segmentRisks?: number[] }) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!segmentRisks) return;
-
-    const heatData = fiberRouteA.slice(0, -1).map((point, i) => [
-      (point as number[])[0],
-      (point as number[])[1],
-      (segmentRisks[i] || 30) / 80,
-    ]);
-
-    const heatLayer = L.heatLayer(heatData, {
-      radius: 40,
-      blur: 30,
-      maxZoom: 17,
-    }).addTo(map);
-
-    return () => {
-      map.removeLayer(heatLayer);
-    };
-  }, [segmentRisks, map]);
-
-  return null;
+  segmentDetails?: SegmentDetail[];
 }
 
 function Legend() {
@@ -97,15 +68,13 @@ function Legend() {
   return null;
 }
 
-export default function MapComponent({ riskScore, segmentRisks }: MapProps) {
-  const getSegmentColor = (risk?: number) => {
-    if (!risk) return "#22c55e";
-    if (risk < 40) return "#22c55e";
-    if (risk < 70) return "#f97316";
+export default function MapComponent({ riskScore, segmentRisks, segmentDetails }: MapProps) {
+  const getSegmentColor = (prob?: number) => {
+    if (!prob) return "#22c55e";
+    if (prob < 0.4) return "#22c55e";
+    if (prob < 0.75) return "#f97316";
     return "#ef4444";
   };
-
-  const highThreat = segmentRisks?.some((r) => r > 75);
 
   const [dashOffset, setDashOffset] = useState(0);
 
@@ -116,15 +85,9 @@ export default function MapComponent({ riskScore, segmentRisks }: MapProps) {
     return () => clearInterval(interval);
   }, []);
 
-  // Generate network-style connections between random incidents
-  const connectionLines = incidentPoints.slice(0, 25).map((point, i) => {
-    const next = incidentPoints[(i + 3) % incidentPoints.length];
-    return [point, next];
-  });
-
   return (
     <MapContainer
-      center={[13.0827, 80.2707]}
+      center={[12.8342, 79.7036]}
       zoom={12}
       className="h-full w-full"
     >
@@ -133,105 +96,91 @@ export default function MapComponent({ riskScore, segmentRisks }: MapProps) {
         url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
 
-      {/* Backbone Route A */}
-      {fiberRouteA.slice(0, -1).map((_, i) => (
-        <Polyline
-          key={`A-${i}`}
-          positions={[fiberRouteA[i], fiberRouteA[i + 1]]}
-          pathOptions={{
-            color: getSegmentColor(segmentRisks?.[i]),
-            weight: 8,
-            opacity: 0.95,
-            dashArray: "10,10",
-            dashOffset: `${dashOffset}`,
-          }}
-        />
-      ))}
+      {/* Fiber Route Between GPs */}
+      {gpNodes.slice(0, -1).map((_, i) => {
+        const detail = segmentDetails?.[i];
+        const prob = detail?.probability || 0;
+        const std = detail?.std || 0;
 
-      {/* Distribution Route B */}
-      {fiberRouteB.slice(0, -1).map((_, i) => (
-        <Polyline
-          key={`B-${i}`}
-          positions={[fiberRouteB[i], fiberRouteB[i + 1]]}
-          pathOptions={{
-            color: "#3b82f6",
-            weight: 4,
-            dashArray: "5,5",
-          }}
-        />
-      ))}
+        const isCritical = prob > 0.75;
+        const isUncertain = std > 0.08;
 
-      {/* Operational Zones */}
-      {zones.map((zone, index) => (
+        return (
+          <Polyline
+            key={`fiber-${i}`}
+            positions={[gpNodes[i], gpNodes[i + 1]]}
+            pathOptions={{
+              color: getSegmentColor(prob),
+              weight: isCritical ? 8 : 6,
+              opacity: 0.95,
+              dashArray: isUncertain ? "6,4" : undefined
+            }}
+            className={isCritical ? "pulse-glow" : ""}
+          >
+            {detail && (
+              <Tooltip direction="top" sticky>
+                <div style={{
+                  background: "rgba(17,24,39,0.85)",
+                  backdropFilter: "blur(10px)",
+                  padding: "12px",
+                  borderRadius: "8px",
+                  color: "white",
+                  minWidth: "220px",
+                  fontFamily: "monospace"
+                }}>
+                  <div style={{ fontWeight: "bold", marginBottom: "6px" }}>
+                    {detail.id}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "6px" }}>
+                    IFI: {detail.ifi.toFixed(3)}
+                  </div>
+                  <div>Probability: {(detail.probability * 100).toFixed(1)}%</div>
+                  <div>Uncertainty: ±{detail.std.toFixed(3)}</div>
+                  <div>Impact: {detail.impact.toFixed(3)}</div>
+                  <div style={{ marginTop: "6px", fontSize: "12px", opacity: 0.8 }}>
+                    Rainfall: {(detail.rainfall_normalized || 0).toFixed(2)}<br/>
+                    Construction: {(detail.construction_score || 0).toFixed(2)}<br/>
+                    Centrality: {(detail.centrality || 0).toFixed(2)}
+                  </div>
+                </div>
+              </Tooltip>
+            )}
+          </Polyline>
+        );
+      })}
+
+      {/* GP Markers */}
+      {gpNodes.map((point, index) => (
         <CircleMarker
-          key={index}
-          center={zone.coords as LatLngExpression}
-          radius={6}
-          pathOptions={{ color: "white", fillColor: "#6366f1", fillOpacity: 0.8 }}
+          key={`gp-${index}`}
+          center={point}
+          radius={7}
+          pathOptions={{
+            color: "white",
+            fillColor: "#2563eb",
+            fillOpacity: 0.9,
+          }}
         >
           <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-            {zone.name}
+            GP {index + 1}
           </Tooltip>
         </CircleMarker>
       ))}
-
-      {/* Dense Incident Markers */}
-      {incidentPoints.map((point, index) => (
-        <React.Fragment key={`incident-group-${index}`}>
-          {/* Outer glow */}
-          <CircleMarker
-            center={point}
-            radius={12}
-            pathOptions={{
-              color: "#f59e0b",
-              fillColor: "#f59e0b",
-              fillOpacity: 0.15,
-            }}
-          />
-          {/* Core point */}
-          <CircleMarker
-            center={point}
-            radius={5}
-            pathOptions={{
-              color: "#f59e0b",
-              fillColor: "#f59e0b",
-              fillOpacity: 0.9,
-            }}
-          />
-        </React.Fragment>
-      ))}
-
-      {/* Network Graph Connections */}
-      {connectionLines.map((line, idx) => (
-        <Polyline
-          key={`connection-${idx}`}
-          positions={line as LatLngExpression[]}
-          pathOptions={{
-            color: "#38bdf8",
-            weight: 1.5,
-            opacity: 0.4,
-          }}
-        />
-      ))}
-
-      {/* Animated Critical Pulse */}
-      {highThreat && (
-        <CircleMarker
-          center={fiberRouteA[1]}
-          radius={60}
-          pathOptions={{
-            color: "#ef4444",
-            fillColor: "#ef4444",
-            fillOpacity: 0.1,
-          }}
-        />
-      )}
-
-      {/* Heatmap */}
-      <HeatLayer segmentRisks={segmentRisks} />
 
       {/* Legend */}
       <Legend />
     </MapContainer>
   );
 }
+
+<style jsx global>{`
+  .pulse-glow {
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { filter: drop-shadow(0 0 4px rgba(239,68,68,0.6)); }
+    50% { filter: drop-shadow(0 0 14px rgba(239,68,68,1)); }
+    100% { filter: drop-shadow(0 0 4px rgba(239,68,68,0.6)); }
+  }
+`}</style>

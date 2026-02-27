@@ -20,6 +20,18 @@ const gpNodes: LatLngExpression[] = [
   [12.7579, 79.7484], // Kalur
 ];
 
+const villageNames = [
+  "Angambakkam",
+  "Ariyaperumbakkam",
+  "Asoor",
+  "Avalur",
+  "Ayyangarkulam",
+  "Damal",
+  "Elayanarvelur",
+  "Kalakattur",
+  "Kalur",
+];
+
 interface SegmentDetail {
   id: string;
   probability: number;
@@ -70,7 +82,7 @@ function Legend() {
 
 export default function MapComponent({ riskScore, segmentRisks, segmentDetails }: MapProps) {
   const getSegmentColor = (prob?: number) => {
-    if (!prob) return "#22c55e";
+    if (prob === undefined) return "#22c55e";
     if (prob < 0.4) return "#22c55e";
     if (prob < 0.75) return "#f97316";
     return "#ef4444";
@@ -99,73 +111,108 @@ export default function MapComponent({ riskScore, segmentRisks, segmentDetails }
       {/* Fiber Route Between GPs */}
       {gpNodes.slice(0, -1).map((_, i) => {
         const detail = segmentDetails?.[i];
-        const prob = detail?.probability || 0;
-        const std = detail?.std || 0;
+        const prob = detail?.probability ?? 0;
+        const std = detail?.std ?? 0;
 
         const isCritical = prob > 0.75;
         const isUncertain = std > 0.08;
 
         return (
-          <Polyline
-            key={`fiber-${i}`}
-            positions={[gpNodes[i], gpNodes[i + 1]]}
-            pathOptions={{
-              color: getSegmentColor(prob),
-              weight: isCritical ? 8 : 6,
-              opacity: 0.95,
-              dashArray: isUncertain ? "6,4" : undefined
-            }}
-            className={isCritical ? "pulse-glow" : ""}
-          >
-            {detail && (
-              <Tooltip direction="top" sticky>
-                <div style={{
-                  background: "rgba(17,24,39,0.85)",
-                  backdropFilter: "blur(10px)",
-                  padding: "12px",
-                  borderRadius: "8px",
-                  color: "white",
-                  minWidth: "220px",
-                  fontFamily: "monospace"
-                }}>
-                  <div style={{ fontWeight: "bold", marginBottom: "6px" }}>
-                    {detail.id}
+          <React.Fragment key={`fiber-${i}`}>
+            <Polyline
+              positions={[gpNodes[i], gpNodes[i + 1]]}
+              pathOptions={{
+                color: getSegmentColor(prob),
+                weight: isCritical ? 14 : 10,
+                opacity: 0.15,
+                dashArray: isUncertain ? "2,6" : undefined,
+                interactive: true,
+              }}
+            />
+            <Polyline
+              positions={[gpNodes[i], gpNodes[i + 1]]}
+              pathOptions={{
+                color: getSegmentColor(prob),
+                weight: isCritical ? 8 : 6,
+                opacity: 1,
+                dashArray: "6,10",
+                dashOffset: dashOffset.toString(),
+                interactive: true,
+              }}
+              className={isCritical ? "pulse-glow" : ""}
+            >
+              {detail && (
+                <Tooltip direction="top" sticky>
+                  <div style={{
+                    background: "rgba(15,23,42,0.75)",
+                    backdropFilter: "blur(18px)",
+                    padding: "16px",
+                    borderRadius: "12px",
+                    color: "white",
+                    minWidth: "260px",
+                    fontFamily: "monospace",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    boxShadow: "0 0 25px rgba(0,0,0,0.6)"
+                  }}>
+
+                    <div style={{ fontWeight: "bold", marginBottom: "8px", fontSize: "13px", letterSpacing: "1px" }}>
+                      {detail.id}
+                    </div>
+
+                    <div style={{ fontSize: "26px", fontWeight: "bold", marginBottom: "10px", color: detail.ifi > 0.7 ? "#ef4444" : "#22c55e" }}>
+                      IFI {detail.ifi.toFixed(3)}
+                    </div>
+
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", fontSize: "12px" }}>
+                      <div>Probability</div>
+                      <div style={{ textAlign: "right" }}>{(detail.probability * 100).toFixed(1)}%</div>
+
+                      <div>Uncertainty</div>
+                      <div style={{ textAlign: "right" }}>±{detail.std.toFixed(3)}</div>
+
+                      <div>Impact</div>
+                      <div style={{ textAlign: "right" }}>{detail.impact.toFixed(3)}</div>
+                    </div>
+
+                    <div style={{ marginTop: "12px", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "10px", fontSize: "11px", opacity: 0.85 }}>
+                      <div>Rainfall Index: {(detail.rainfall_normalized || 0).toFixed(2)}</div>
+                      <div>Construction Index: {(detail.construction_score || 0).toFixed(2)}</div>
+                      <div>Centrality: {(detail.centrality || 0).toFixed(2)}</div>
+                    </div>
+
                   </div>
-                  <div style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "6px" }}>
-                    IFI: {detail.ifi.toFixed(3)}
-                  </div>
-                  <div>Probability: {(detail.probability * 100).toFixed(1)}%</div>
-                  <div>Uncertainty: ±{detail.std.toFixed(3)}</div>
-                  <div>Impact: {detail.impact.toFixed(3)}</div>
-                  <div style={{ marginTop: "6px", fontSize: "12px", opacity: 0.8 }}>
-                    Rainfall: {(detail.rainfall_normalized || 0).toFixed(2)}<br/>
-                    Construction: {(detail.construction_score || 0).toFixed(2)}<br/>
-                    Centrality: {(detail.centrality || 0).toFixed(2)}
-                  </div>
-                </div>
-              </Tooltip>
-            )}
-          </Polyline>
+                </Tooltip>
+              )}
+            </Polyline>
+          </React.Fragment>
         );
       })}
 
       {/* GP Markers */}
-      {gpNodes.map((point, index) => (
-        <CircleMarker
-          key={`gp-${index}`}
-          center={point}
-          radius={7}
-          pathOptions={{
-            color: "white",
-            fillColor: "#2563eb",
-            fillOpacity: 0.9,
-          }}
-        >
-          <Tooltip direction="top" offset={[0, -10]} opacity={1}>
-            GP {index + 1}
-          </Tooltip>
-        </CircleMarker>
-      ))}
+      {gpNodes.map((point, index) => {
+        const isAggregation = index === 0;
+
+        return (
+          <CircleMarker
+            key={`gp-${index}`}
+            center={point}
+            radius={isAggregation ? 12 : 6}
+            pathOptions={{
+              color: "white",
+              fillColor: isAggregation ? "#9333ea" : "#2563eb",
+              fillOpacity: 0.9,
+              weight: isAggregation ? 3 : 1
+            }}
+            className="node-glow"
+          >
+            <Tooltip direction="top" offset={[0, -10]} opacity={1}>
+              {isAggregation
+                ? `Aggregation Node — ${villageNames[index]}`
+                : villageNames[index]}
+            </Tooltip>
+          </CircleMarker>
+        );
+      })}
 
       {/* Legend */}
       <Legend />
@@ -175,12 +222,16 @@ export default function MapComponent({ riskScore, segmentRisks, segmentDetails }
 
 <style jsx global>{`
   .pulse-glow {
-    animation: pulse 2s infinite;
+    animation: pulseCritical 1.8s infinite ease-in-out;
   }
 
-  @keyframes pulse {
-    0% { filter: drop-shadow(0 0 4px rgba(239,68,68,0.6)); }
-    50% { filter: drop-shadow(0 0 14px rgba(239,68,68,1)); }
-    100% { filter: drop-shadow(0 0 4px rgba(239,68,68,0.6)); }
+  @keyframes pulseCritical {
+    0% { filter: drop-shadow(0 0 6px rgba(239,68,68,0.6)); }
+    50% { filter: drop-shadow(0 0 22px rgba(239,68,68,1)); }
+    100% { filter: drop-shadow(0 0 6px rgba(239,68,68,0.6)); }
+  }
+
+  .node-glow path {
+    filter: drop-shadow(0 0 6px rgba(59,130,246,0.8));
   }
 `}</style>

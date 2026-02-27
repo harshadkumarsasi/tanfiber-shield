@@ -16,6 +16,7 @@ interface RiskResponse {
 export default function DashboardPage() {
   const [riskData, setRiskData] = useState<RiskResponse | null>(null);
   const [now, setNow] = useState<string>("");
+  const [riskHistory, setRiskHistory] = useState<number[]>([]);
 
   useEffect(() => {
     const fetchRisk = async () => {
@@ -23,6 +24,10 @@ export default function DashboardPage() {
         const res = await fetch("http://127.0.0.1:8000/risk");
         const data = await res.json();
         setRiskData(data);
+        setRiskHistory((prev) => {
+          const updated = [...prev, data.highest_risk_value * 100];
+          return updated.slice(-20);
+        });
       } catch (err) {
         console.error("Risk fetch failed:", err);
       }
@@ -42,6 +47,11 @@ export default function DashboardPage() {
     riskData?.segments_detailed?.map((s: any) => s.probability) ?? [];
   const segmentDetails = riskData?.segments_detailed ?? [];
 
+  const sortedSegments = [...segmentDetails]
+    .sort((a: any, b: any) => b.probability - a.probability);
+
+  const topThree = sortedSegments.slice(0, 3);
+
   const riskColor =
     overallRisk > 70
       ? "text-red-400"
@@ -50,7 +60,7 @@ export default function DashboardPage() {
       : "text-green-400";
 
   return (
-    <div className="h-screen w-screen bg-[#05070d] text-white overflow-hidden flex flex-col">
+    <div className="min-h-screen w-screen bg-[#05070d] text-white flex flex-col">
       
       {/* TOP BAR */}
       <div className="h-16 bg-gradient-to-r from-[#0b1220] to-[#0f172a] border-b border-gray-800 flex items-center justify-between px-8 z-50">
@@ -160,6 +170,77 @@ export default function DashboardPage() {
                   key={i}
                   className="bg-orange-500 w-4 rounded-sm"
                   style={{ height: `${v}%` }}
+                />
+              ))}
+            </div>
+          </div>
+
+          {/* SEGMENT RISK RANKING */}
+          <div className="bg-[#111827] p-4 rounded-lg border border-gray-700">
+            <p className="text-xs text-gray-400 mb-3">
+              Segment Risk Ranking
+            </p>
+            <div className="space-y-2">
+              {sortedSegments.map((seg: any, i: number) => {
+                const percent = (seg.probability * 100).toFixed(1);
+                const barColor =
+                  seg.probability > 0.7
+                    ? "bg-red-500"
+                    : seg.probability > 0.4
+                    ? "bg-yellow-500"
+                    : "bg-green-500";
+
+                return (
+                  <div key={i}>
+                    <div className="flex justify-between text-xs text-gray-300">
+                      <span>{seg.id}</span>
+                      <span>{percent}%</span>
+                    </div>
+                    <div className="w-full bg-gray-800 h-2 rounded">
+                      <div
+                        className={`${barColor} h-2 rounded`}
+                        style={{ width: `${percent}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* TOP 3 CRITICAL SEGMENTS */}
+          <div className="bg-[#111827] p-4 rounded-lg border border-gray-700">
+            <p className="text-xs text-gray-400 mb-3">
+              Top 3 Critical Segments
+            </p>
+            <div className="space-y-2">
+              {topThree.map((seg: any, i: number) => (
+                <div
+                  key={i}
+                  className="flex justify-between text-sm text-gray-300"
+                >
+                  <span>
+                    {i + 1}. {seg.id}
+                  </span>
+                  <span className="text-red-400 font-semibold">
+                    {(seg.probability * 100).toFixed(1)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* REAL-TIME RISK TREND */}
+          <div className="bg-[#111827] p-4 rounded-lg border border-gray-700">
+            <p className="text-xs text-gray-400 mb-3">
+              Real-Time Risk Trend
+            </p>
+            <div className="flex items-end gap-1 h-16">
+              {riskHistory.map((v, i) => (
+                <div
+                  key={i}
+                  className="bg-cyan-400 w-2 rounded-sm"
+                  style={{ height: `${Math.min(v, 100)}%` }}
                 />
               ))}
             </div>
